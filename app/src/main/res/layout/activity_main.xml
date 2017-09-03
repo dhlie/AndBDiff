@@ -11,12 +11,31 @@
         android:layout_centerInParent="true"
         android:textSize="18sp"
         android:text="Hello World!" />
+
+    <TextView
+        android:id="@+id/info_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="10dp"
+        android:textSize="18sp"
+        android:text="Hello World!" />
+    <Button
+        android:id="@+id/btn_install_old"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="10dp"
+        android:layout_marginLeft="10dp"
+        android:text="old apk"
+        android:onClick="installOld"/>
     <Button
         android:id="@+id/btn_diff"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:padding="8dp"
         android:layout_alignParentBottom="true"
+        android:layout_toRightOf="@+id/btn_install_old"
         android:layout_marginBottom="10dp"
         android:layout_marginLeft="10dp"
         android:text="apply diff"

@@ -13,42 +13,100 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
-import java.io.FileNotFoundException;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 
 public class MainActivity extends AppCompatActivity {
 
+    private String mOldApkPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/bdiff/V1.0.apk";
     private String mNewApkPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/bdiff/V2.0.apk";
     private String mPatchPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/bdiff/path.bf";
     private String mPatchedNewApkPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/bdiff/patchV2.0.apk";
+
+    private TextView mTVInfo, mTVVersion;
+    private boolean isDiffing;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // Example of a call to a native method
-        TextView tv = (TextView) findViewById(R.id.sample_text);
-        tv.setText("Version:1.0");
+        mTVVersion = (TextView) findViewById(R.id.sample_text);
+        mTVVersion.setText("Version:1.0");
+
+        mTVInfo = (TextView) findViewById(R.id.info_text);
+    }
+
+    public void installOld(View view) {
+        try {
+            if (isDiffing) {
+                Toast.makeText(this, "正在生成差分包...", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (mTVVersion.getText().toString().endsWith("1.0")) {
+                Toast.makeText(this, "已经是旧版本", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            File file = new File(mOldApkPath);
+            if (!file.exists()) {
+                mTVInfo.setText("旧版本不存在");
+                return;
+            }
+            installApk(file);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public void applyDiff(View view) {
         try {
-            PackageManager pm = getPackageManager();
-            ApplicationInfo ai = pm.getApplicationInfo(getPackageName(), 0);
-            File apk = new File(ai.sourceDir);
-            if (apk.exists()) {
-                Toast.makeText(this, "存在", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "不存在", Toast.LENGTH_SHORT).show();
+            if (isDiffing) {
+                Toast.makeText(this, "正在生成差分包...", Toast.LENGTH_SHORT).show();
                 return;
             }
+            isDiffing = true;
+            mTVInfo.setText("正在生成差分包...");
 
-            InputStream in = getAssets().open("v2.0.apk");
-            streamToFile(in, mNewApkPath);
-            BDiffUtil.applyDiff(ai.sourceDir, mNewApkPath, mPatchPath);
-            Toast.makeText(this, "差分包生成成功", Toast.LENGTH_SHORT).show();
+
+            new Thread(){
+                @Override
+                public void run() {
+                    try {
+                        PackageManager pm = getPackageManager();
+                        final ApplicationInfo ai = pm.getApplicationInfo(getPackageName(), 0);
+                        File apk = new File(ai.sourceDir);
+                        if (!apk.exists()) {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    isDiffing = false;
+                                    mTVInfo.setText(ai.sourceDir+" 不能打开");
+                                }
+                            });
+                            return;
+                        }
+                        streamToFile(new FileInputStream(apk), mOldApkPath);
+
+                        InputStream in = getAssets().open("v2.0.apk");
+                        streamToFile(in, mNewApkPath);
+                        File patch = new File(mPatchPath);
+                        if (patch.exists()) patch.delete();
+                        BDiffUtil.applyDiff(ai.sourceDir, mNewApkPath, mPatchPath);
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                isDiffing = false;
+                                mTVInfo.setText("差分包生成成功");
+                            }
+                        });
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        isDiffing = false;
+                        mTVInfo.setText("差分包生成失败");
+                    }
+                }
+            }.start();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -56,10 +114,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void applyPatch(View view) {
+        if (isDiffing) {
+            Toast.makeText(this, "正在生成差分包...", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        File patchFile = new File(mPatchPath);
+        if (!patchFile.exists() || patchFile.length() <= 0) {
+            mTVInfo.setText("差分包不存在");
+            return;
+        }
         try {
             PackageManager pm = getPackageManager();
             ApplicationInfo ai = pm.getApplicationInfo(getPackageName(), 0);
+            File file = new File(mPatchedNewApkPath);
+            if (file.exists()) file.delete();
             BDiffUtil.applyPatch(ai.sourceDir, mPatchedNewApkPath, mPatchPath);
+            file = new File(mPatchedNewApkPath);
+            if (!file.exists()) {
+                mTVInfo.setText("未合成正确的apk");
+                return;
+            }
             installApk(new File(mPatchedNewApkPath));
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
@@ -67,11 +141,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void installApk(File file) {
-        Intent intent=new Intent();
-        intent.setAction(android.content.Intent.ACTION_VIEW);
-        intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive");
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        startActivityForResult(intent,3);
+        Intent install = new Intent(Intent.ACTION_VIEW);
+        install.setDataAndType(Uri.fromFile(file),
+                "application/vnd.android.package-archive");
+        install.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(install);
     }
 
 
